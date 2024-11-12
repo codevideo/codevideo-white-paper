@@ -1,0 +1,150 @@
+\documentclass[11pt, a4paper]{article}
+
+% Packages
+\usepackage[margin=1.75in]{geometry}
+\usepackage{parskip}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{amsmath, amsthm, amssymb}
+
+% Header and Footer
+\pagestyle{fancy}
+\fancyhf{} % Clear all headers and footers
+\renewcommand{\headrulewidth}{0pt} % Remove the header line
+\fancyfoot[C]{\thepage} % Page number centered at the bottom
+
+% Section Formatting
+\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
+
+% Title and TOC
+\title{The CodeVideo Framework: Event Sourcing for IDE State Representation in Educational Software}
+\author{Full Stack Craft LLC}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+The rapid growth of online education has transformed the software learning experience, creating unprecedented demand for high-quality, interactive software courses. As instructional video content rises, so do the demands for editing, structuring, and delivering this content at scale—a process that is both resource-intensive and technically challenging.
+
+In this document, we present \textit{CodeVideo}, a event-sourcing-based framework designed to streamline the creation and management of software instructional videos. By simulate every interaction (keystrokes and or mouse interactions) in an Integrated Development Environment (IDE), the framework can produce deterministic, repeatable sequences that simulate a live coding session. The result is not only the ability to generate a static snapshot of the IDE state at any given time but also the capability to generate entire instructional videos programmatically, ensuring consistency and precision across sessions.
+
+\section{Framework Architecture and Abstractions}
+
+The CodeVideo Framework represents a modular and highly abstracted approach to IDE-based video course creation. This section provides an in-depth look at its primary abstractions and the structured hierarchy that enables reproducible, fine-grained state control over IDE interactions.
+
+\subsection{Abstraction Layers}
+
+The framework is built on several core abstractions, each of which represents a fundamental unit of interaction within the software course environment.
+
+\subsubsection{Course Structure}
+
+At the topmost level of the \textit{CodeVideo} framework, we define a course, represented by:
+\begin{itemize}
+    \item A unique identifier, \( C_{id} \)
+    \item A descriptive name, \( C_{name} \)
+    \item A sequence of instructional units or lessons, denoted \( L = \{ L_1, L_2, \dots, L_n \} \)
+\end{itemize}
+
+\subsubsection{Lesson Composition}
+
+Each lesson \( L \) is composed of:
+\begin{itemize}
+    \item An initial state snapshot of the project workspace, \( S_{initial} \)
+    \item A sequence of discrete actions \( A = \{ a_1, a_2, \dots, a_m \} \)
+    \item A final state snapshot \( S_{final} \) that serves as the baseline for subsequent lessons
+\end{itemize}
+
+\subsection{Action Representation}
+
+Central to the framework is the concept of an \textit{action}, the smallest unit of interaction within the IDE. Actions, represented as \( a_i \), encode the following elements:
+\begin{align*}
+    a_i : \text{action\_type} \rightarrow \text{action\_value}
+\end{align*}
+
+Examples of action types include text entry commands, cursor movements, file modifications, and verbal narration cues. For instance:
+\begin{itemize}
+    \item \textbf{Text Entry Action:} 
+    \begin{align*}
+        & a_{type} = \text{``enter-text''} \\
+        & a_{value} = \text{``console.log('Hello, world!');''}
+    \end{align*}
+    \item \textbf{Narration Action:} 
+    \begin{align*}
+        & a_{type} = \text{``speak-during''} \\
+        & a_{value} = \text{``I'm logging a message to the console.''}
+    \end{align*}
+\end{itemize}
+
+\section{Snapshots: Capturing IDE State}
+
+Snapshots represent the entire state of the IDE at a given point, allowing for precise rollback and reproducibility:
+\begin{align*}
+    S = \langle & \text{metadata},\\
+    & \text{file\_structure},\\
+    & \text{selected\_file},\\
+    & \text{open\_files},\\
+    & \text{editor\_content},\\
+    & \text{caret\_position},\\
+    & \text{terminal\_content}
+    \rangle
+\end{align*}
+
+Where:
+
+\begin{itemize}
+    \item \textbf{Metadata} contains high-level course information.
+    \item \textbf{File Structure} denotes the directory tree visible in the IDE.
+    \item \textbf{Selected File} and \textbf{Open Files} track active files.
+    \item \textbf{Editor Content} and \textbf{Caret Position} record the current text and cursor position.
+    \item \textbf{Terminal Content} displays command-line output.
+\end{itemize}
+
+\section{Virtual Editor and Rendering Engine}
+The CodeVideo framework integrates a \textit{virtual editor}, which emulates IDE interactions in a standalone environment:
+\begin{itemize}
+    \item The virtual editor provides snapshots on demand via \( getProjectSnapshot() \), allowing course authors to generate real-time previews of each state.
+\end{itemize}
+
+The rendering engine, \textit{CodeVideo Studio}, provides a visual representation within the IDE, enabling authors to edit actions dynamically and validate course accuracy.
+
+\section{Validation and Quality Assurance}
+Each lesson’s continuity is verified through a \textit{snapshot validator}:
+\[
+\forall i \in [1, n-1], \quad S_{final}(L_i) = S_{initial}(L_{i+1})
+\]
+If any two consecutive snapshots do not match, the validator throws an error, ensuring seamless progression across lessons.
+
+\section{Recording and Playback Mechanisms}
+
+The framework supports a range of recorders, each capturing specific aspects of the user’s IDE interaction:
+
+\begin{itemize}
+    \item Keystrokes and cursor movements are recorded in the main editor.
+    \item Interactions within the file tree, terminal, and narration windows are recorded and transformed to action format to build the repeatable and full IDE state representation.
+\end{itemize}
+
+\section{Driver Integration for Automated Video Generation}
+
+CodeVideo provides multiple \textit{drivers} for automated video generation:
+
+\begin{itemize}
+    \item \textbf{CodeVideo Studio} our main editor, based on a Monaco editor along side an action editor. Includes time travel and snapshot validation.
+    \item \textbf{Monaco Editor Driver} for localhost single editor-based video generation (beta)
+    \item \textbf{VSCode Driver} for localhost complete IDE editor-based video generation (beta)
+\end{itemize}
+
+\section{Future Directions: Advanced Abstract Syntax Tree Manipulations Through Time}
+
+Ongoing research aims to enable abstract syntax tree (AST) manipulations through time, which will allow modifications to past states within a lesson—such as renaming variables or functions—and propagating these changes in the project forward.
+
+\section{Conclusion}
+
+The \textit{CodeVideo} framework offers a robust, reproducible method for generating IDE-based educational content, reducing manual editing and increasing course consistency. With its event-sourcing architecture, the framework not only captures precise IDE states but also provides a platform for creating interactive, context-rich programming tutorials.
+
+\end{document}
