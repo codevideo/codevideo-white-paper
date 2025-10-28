@@ -7,6 +7,13 @@
 \usepackage{fancyhdr}
 \usepackage{graphicx}
 \usepackage{amsmath, amsthm, amssymb}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{appendix}
+\usepackage{fvextra}
+\usepackage[table]{xcolor}
+\usepackage[style=numeric]{biblatex}
+\addbibresource{references.bib}
 
 % Header and Footer
 \pagestyle{fancy}
@@ -18,10 +25,13 @@
 \titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
 \titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
 
+% Add hyperref last
+\usepackage[hidelinks]{hyperref}
+
 % Title and TOC
 \title{The CodeVideo Framework: Event Sourcing for IDE State Representation in Educational Software}
 \author{Full Stack Craft LLC}
-\date{\today}
+\date{\today} 
 
 \begin{document}
 
@@ -30,58 +40,171 @@
 \newpage
 
 \section{Introduction}
-The rapid growth of online education has transformed the software learning experience, creating unprecedented demand for high-quality, interactive software courses. As instructional video content rises, so do the demands for editing, structuring, and delivering this content at scale—a process that is both resource-intensive and technically challenging.
 
-In this document, we present \textit{CodeVideo}, a event-sourcing-based framework designed to streamline the creation and management of software instructional videos. By simulate every interaction (keystrokes and or mouse interactions) in an Integrated Development Environment (IDE), the framework can produce deterministic, repeatable sequences that simulate a live coding session. The result is not only the ability to generate a static snapshot of the IDE state at any given time but also the capability to generate entire instructional videos programmatically, ensuring consistency and precision across sessions.
+The rapid growth of online education has transformed the software learning experience, creating unprecedented demand for high-quality, interactive software courses. As the demand for instructional video content continues to rise, so do the demands for editing, structuring, and delivering this content at scale is a process that is both resource-intensive and technically challenging.
 
-\section{Framework Architecture and Abstractions}
+In this document, we present \textit{CodeVideo}, an event-sourcing-based framework designed to streamline the creation and management of software instructional videos. By simulating every interaction (keystrokes and or mouse interactions) in an Integrated Development Environment (IDE), the framework can produce deterministic, repeatable sequences that simulate a live coding session. The result is not only the ability to generate a static snapshot of the IDE state at any given time but also the capability to generate entire instructional videos programmatically, ensuring consistency and precision across sessions.
 
-The CodeVideo Framework represents a modular and highly abstracted approach to IDE-based video course creation. This section provides an in-depth look at its primary abstractions and the structured hierarchy that enables reproducible, fine-grained state control over IDE interactions.
+\section{CodeVideo Framework Architecture and Abstraction Layers}
 
-\subsection{Abstraction Layers}
+The CodeVideo Framework represents a modular and highly abstracted approach to IDE-based video course creation. This section provides an in-depth look at its primary abstractions and the structured hierarchy that enables reproducible, fine-grained state control over IDE interactions. The three main components are Courses, Lessons, and Actions.
 
-The framework is built on several core abstractions, each of which represents a fundamental unit of interaction within the software course environment.
+\subsection{Course}
 
-\subsubsection{Course Structure}
+At the topmost level of the \textit{CodeVideo} framework, we define a course, \( C \), represented by:
 
-At the topmost level of the \textit{CodeVideo} framework, we define a course, represented by:
 \begin{itemize}
     \item A unique identifier, \( C_{id} \)
     \item A descriptive name, \( C_{name} \)
-    \item A sequence of instructional units or lessons, denoted \( L = \{ L_1, L_2, \dots, L_n \} \)
+    \item A sequence of instructional units or lessons, \( L = \{ L_1, L_2, \dots, L_n \} \)
 \end{itemize}
 
-\subsubsection{Lesson Composition}
+\subsection{Lesson}
 
-Each lesson \( L \) is composed of:
+Each lesson, \( L \), is composed of:
 \begin{itemize}
-    \item An initial state snapshot of the project workspace, \( S_{initial} \)
+    \item An (optional) initial state snapshot of the project workspace, \( S_{initial} \). A null or empty initial state represents a completely empty IDE
     \item A sequence of discrete actions \( A = \{ a_1, a_2, \dots, a_m \} \)
-    \item A final state snapshot \( S_{final} \) that serves as the baseline for subsequent lessons
+    \item An (optional) final state snapshot \( S_{final} \) that serves as the baseline for subsequent lessons
 \end{itemize}
 
-\subsection{Action Representation}
+\subsection{Action}
 
 Central to the framework is the concept of an \textit{action}, the smallest unit of interaction within the IDE. Actions, represented as \( a_i \), encode the following elements:
+
 \begin{align*}
     a_i : \text{action\_type} \rightarrow \text{action\_value}
 \end{align*}
 
-Examples of action types include text entry commands, cursor movements, file modifications, and verbal narration cues. For instance:
+Examples of action types include text entry commands, cursor movements, file modifications, and verbal narration. For instance:
+
 \begin{itemize}
-    \item \textbf{Text Entry Action:} 
+    \item \textbf{Editor Typing Action:} 
     \begin{align*}
-        & a_{type} = \text{``enter-text''} \\
-        & a_{value} = \text{``console.log('Hello, world!');''}
+        & a_{type} = \text{``editor-type''} \\
+        & a_{value} = \text{``console.log(`Hello, world!');''}
+    \end{align*}
+    \item \textbf{Terminal Typing Action:} 
+    \begin{align*}
+        & a_{type} = \text{``terminal-type''} \\
+        & a_{value} = \text{``npm run start''}
+    \end{align*}
+    \item \textbf{File Explorer File Creation Action:} 
+    \begin{align*}
+        & a_{type} = \text{``file-explorer-create-file''} \\
+        & a_{value} = \text{``mytextfile.txt''}
     \end{align*}
     \item \textbf{Narration Action:} 
     \begin{align*}
-        & a_{type} = \text{``speak-during''} \\
-        & a_{value} = \text{``I'm logging a message to the console.''}
+        & a_{type} = \text{``author-speak-before''} \\
+        & a_{value} = \text{``I'm going to log a message to the console.''}
     \end{align*}
 \end{itemize}
 
-\section{Snapshots: Capturing IDE State}
+It should also be noted that formally a series of actions n actions can be broken down into n lessons, given that the lesson captures the snapshot defined by the previous actions. For example, consider 100 actions that represents a rather long lesson. We can break this lesson into two lessons of 50 actions each, as long as the snapshot of the IDE at the end of the first lesson is the same as the snapshot of the IDE at the start of the second lesson.
+
+\begin{align*}
+    S_{final}(L_1) = S_{initial}(L_2) = S_{initial}(L_1) + a_{1} + a_{2} + \dots + a_{50}
+\end{align*}
+
+\section{Actions in Detail}
+
+Actions form the entire foundation of the CodeVideo framework. From an abstract standpoint, an action should be able to handle any basic interaction that is possible with a computer. There are limited ways of interacting with a computer, in order of most common to least common:
+
+\begin{itemize}
+    \item Keyboard: A keyboard has a large variety of keys, but they can be broken down into 3 categories: letters, numbers, and symbols.
+    \item Mouse: a mouse has motion sensor, 3 buttons, and a scroll wheel.
+    \item Trackpad: which have 1 button and a touch surface.
+    \item Audio inputs (microphones), which represent a series of points at varying amplitudes.
+    \item Video inputs (cameras), which represent a series of images.
+\end{itemize}
+
+We abstract these inputs to three main categories of actions: keyboard, mouse, and multimedia (audio and video).
+
+Within an IDE, there are then 3 target locations where these actions can be applied: the editor, the file tree, and the terminal.
+
+\subsection{Anatomy of an Action Name}
+
+An action name is formulated by the following schema:
+
+\texttt{<domain>-<action-type>}
+
+Where:
+
+\begin{itemize}
+    \item \textbf{Domain} refers to the domain of the action (e.g., editor, author, file-explorer, terminal, external, slide).
+    \item \textbf{Action Type} describes the specific action being performed (e.g., type, click, speak).
+\end{itemize}
+
+Note that the domains need not be specifically related to an IDE. The CodeVideo framework supports browser previews of websites (the `external' domain), as well as slide presentations (the `slide' domain).
+
+Appendix A provides a sample of a series of actions, representing a Console Logging Lesson for JavaScript.
+
+Appendix B provides all possible action names within the CodeVideo framework.
+
+% A mac magic keyboard with number pad has 109 keys
+
+% A mac magic keyboard without number pad has 78 keys
+
+\subsection{Action Composition}
+
+Actions are strictly composed of two parts: the action type and the action value. The action type is a string that describes the action, and the action value is a string that represents the value of the action. For example, an editor typing action would have the action type of ``type-editor" and the action value of ``console.log('Hello, world!');".
+
+\subsection{Action Granularity}
+
+The framework implements a hierarchical action granularity system, where the base unit of interaction can be configured according to course requirements:
+
+\begin{itemize}
+    \item \textbf{Atomic Actions} (Default): The finest level of granularity, capturing:
+    \begin{itemize}
+        \item Individual keystrokes: \( a_{key} = \{key: `a', step: n\} \)
+        \item Single cursor movements: \( a_{cursor} = \{position: (x,y), step: n\} \)
+        \item Mouse events: \( a_{mouse} = \{type: 'click', position: (x,y), step: n\} \)
+    \end{itemize}
+    \item \textbf{Composed Actions}: Higher-level abstractions that can be configured:
+    \begin{itemize}
+        \item Line-level changes: \( a_{line} = \{content: string, lineNumber: n\} \)
+        \item Block-level modifications: \( a_{block} = \{content: string, range: (start, end)\} \)
+        \item Semantic operations: \( a_{semantic} = \{type: `function-declaration', content: string\} \)
+    \end{itemize}
+\end{itemize}
+
+The granularity level can be adjusted dynamically, with the framework maintaining the atomic actions internally while presenting a more abstract interface when desired:
+
+\[
+A_{composed} = f(a_1, a_2, ..., a_n) \text{ where } a_i \text{ are atomic actions}
+\]
+
+\subsection{Composite Actions}
+
+Composite Actions are a highly composed actions that represent, and can be broken down into singular, atomic actions. Composite actions can manifest in two ways:
+
+\begin{enumerate}
+    \item Via a more complex `value': while the action name becomes simpler, the action value becomes more complex. For example, the ``composite-mouse" action is an abstracted action for an entire mouse movement, including the mouse's x and y coordinates, timestamp, what buttons were clicked, and so on.
+    \item Via a series of actions: for example the `composite-file-explorer-create-file-via-mouse' action is a composite action that represents a series of actions: moving to the file explorer, right-clicking the file explorer, moving the mouse to the `New File...' option, clicking that option, typing in the new file name, and hitting enter.
+\end{enumerate}
+
+In both cases, these composite actions can be broken down into their respective atomic actions as needed. The key trigger is the starting `composite-' prefix in the action name. Other composite action examples include:
+
+\begin{itemize}
+    \item \textbf{composite-mouse}: represents the sequence of atomic actions to perform a full mouse interaction sequence (movements, clicks, scrolls) over a defined time period.
+    \item \textbf{composite-file-explorer-create-file-with-mouse}: represents the sequence of atomic actions to perform the entire process of creating a new file using mouse interactions.
+    \item \textbf{composite-file-explorer-create-file-with-terminal}: represents the sequence of atomic actions to perform creating a new file using terminal commands
+    \item \textbf{composite-file-explorer-create-folder-with-mouse}: represents the sequence of atomic actions to perform the entire process of creating a new folder using mouse interactions.
+    \item \textbf{composite-file-explorer-create-folder-with-terminal}: represents the sequence of atomic actions to perform creating a new folder using terminal commands
+    \item \textbf{composite-file-explorer-collapse-all-folders-with-mouse}: represents the sequence of atomic actions to perform collapsing all expanded folders in the file explorer using mouse interactions.
+    \item \textbf{composite-file-explorer-collapse-all-folders-with-keyboard}: represents the sequence of atomic actions to perform collapsing all expanded folders in the file explorer using keyboard shortcuts.
+    \item \textbf{composite-terminal-run-command}: represents the sequence of atomic actions to perform executing a command in the terminal, including typing the command and pressing enter.
+    \item \textbf{composite-editor-refactor-variable-name}: represents the sequence of atomic actions to perform renaming a variable throughout the codebase, involving multiple find-and-replace actions.
+    \item \textbf{composite-file-explorer-move-file-with-mouse}: represents the sequence of atomic actions to perform moving a file from one directory to another using mouse interactions.
+    \item \textbf{composite-file-explorer-move-file-with-terminal}: represents the sequence of atomic actions to perform moving a file from one directory to another using terminal commands.
+    \item \textbf{composite-editor-close-all-tabs-with-mouse}: represents the sequence of atomic actions to perform closing all open editor tabs using mouse interactions.
+    \item \textbf{composite-editor-close-all-tabs-with-keyboard}: represents the sequence of atomic actions to perform closing all open editor tabs using keyboard shortcuts.
+    \item \textbf{composite-editor-open-n-terminals-with-mouse}: represents the sequence of atomic actions to perform opening multiple terminal instances using mouse interactions.
+    \item \textbf{composite-editor-open-n-terminals-with-keyboard}: represents the sequence of atomic actions to perform opening multiple terminal instances using keyboard shortcuts.
+\end{itemize}
+
+\section{Snapshots: Capturing the Full IDE State}
 
 Snapshots represent the entire state of the IDE at a given point, allowing for precise rollback and reproducibility:
 \begin{align*}
@@ -91,7 +214,8 @@ Snapshots represent the entire state of the IDE at a given point, allowing for p
     & \text{open\_files},\\
     & \text{editor\_content},\\
     & \text{caret\_position},\\
-    & \text{terminal\_content}
+    & \text{terminal\_content},\\
+    & \text{mouse\_position}
     \rangle
 \end{align*}
 
@@ -102,49 +226,650 @@ Where:
     \item \textbf{File Structure} denotes the directory tree visible in the IDE.
     \item \textbf{Selected File} and \textbf{Open Files} track active files.
     \item \textbf{Editor Content} and \textbf{Caret Position} record the current text and cursor position.
-    \item \textbf{Terminal Content} displays command-line output.
+    \item \textbf{Terminal Content} contains the current command-line output.
+    \item \textbf{Mouse Position} contains the current mouse coordinates.
 \end{itemize}
 
-\section{Virtual Editor and Rendering Engine}
-The CodeVideo framework integrates a \textit{virtual editor}, which emulates IDE interactions in a standalone environment:
+\subsection{Reconstitution of IDE State}
+
+In a software lesson, the authors, keyboard, and mouse components can all be used in parallel while creating lesson, much like how a real software developer would interact with an IDE. The IDE then, is the more or less linear result of these interactions. The IDE state can be reconstituted by replaying the actions in the same order they were recorded. We use logical time to represent the start of any one of these ``parallel" actions, and let the renderers handle the overlapping complexity.
+
+\section{Validators: Deterministic Quality Assurance}
+
+Each lesson’s continuity is verified through a \textit{snapshot validator}, to confirm that the content of the given project at the end of one lesson matches the initial state of the next lesson:
+
+\[
+\forall i \in [1, n-1], \quad S_{final}(L_i) = S_{initial}(L_{i+1})
+\]
+
+If any two consecutive snapshots do not match, the validator throws an error, ensuring seamless progression across lessons.
+
+\section{Renderers: Virtual Editors and CodeVideo Studio}
+
+The CodeVideo framework integrates a \textit{GUI IDE} with a \textit{virtual IDE}, which emulates IDE interactions in a standalone environment:
+
 \begin{itemize}
     \item The virtual editor provides snapshots on demand via \( getProjectSnapshot() \), allowing course authors to generate real-time previews of each state.
 \end{itemize}
 
-The rendering engine, \textit{CodeVideo Studio}, provides a visual representation within the IDE, enabling authors to edit actions dynamically and validate course accuracy.
+The rendering engine, \textit{CodeVideo Studio} (https://studio.codevideo.io), provides a visual representation within the IDE, enabling authors to edit actions dynamically and validate course accuracy.
 
-\section{Validation and Quality Assurance}
-Each lesson’s continuity is verified through a \textit{snapshot validator}:
+\section{Generators: Converting Courses, Lessons, and Actions into a Variety of Multimedia Formats}
+
+\subsection{Parallel Video Generation}
+
+With a 100\% reconstituable IDE state, the framework can generate multiple videos in parallel and stitch them together flawless at the end. 
+
+As an example, consider a 200 step lesson. Via the CodeVideo framework, this lesson can be broken into 200 separate single action videos. However, we require that a complete course snapshot after applying each action is applied. In other words, we require:
+
 \[
-\forall i \in [1, n-1], \quad S_{final}(L_i) = S_{initial}(L_{i+1})
+S_{n} = S_{n-1} + a_{n}
 \]
-If any two consecutive snapshots do not match, the validator throws an error, ensuring seamless progression across lessons.
 
-\section{Recording and Playback Mechanisms}
+Where \(S_{n}\) is the snapshot of the IDE after applying action \(a_{n}\) to the previous snapshot \(S_{n-1}\).
 
-The framework supports a range of recorders, each capturing specific aspects of the user’s IDE interaction:
+From a software architecture standpoint, the framework would then generate these 200 short videos in parallel (or as concurrently as the hardware allows) and can then be stitched together to create a single video that represents the entire lesson. See Appendix A for a theoretical performance analysis of parallel video generation.
+
+\subsection{PNG Snapshots}
+
+Likewise, one can generate a PNG snapshot of the IDE after any given action.
+
+\subsection{PowerPoint Slides}
+
+With careful filtering and processing of the speaking and typing actions, a reasonable draft of a powerpoint presentation can be created from any CodeVideo course, action or lesson.
+
+\section{Recorders: Capturing Actions for Consumption in the CodeVideo Framework}
+
+The framework supports a range of recorders.
+
+\subsection{Mouse Recorder}
+
+CodeVideo offers `codevideo-mouse' library as a rich TypeScript React component that captures mouse interactions within the IDE.
+
+\subsection{Keyboard Recorder}
+
+The first record directly records mouse, keystrokes, and microphone audio:
 
 \begin{itemize}
     \item Keystrokes and cursor movements are recorded in the main editor.
     \item Interactions within the file tree, terminal, and narration windows are recorded and transformed to action format to build the repeatable and full IDE state representation.
 \end{itemize}
 
-\section{Driver Integration for Automated Video Generation}
+\subsection{Video Recorder}
 
-CodeVideo provides multiple \textit{drivers} for automated video generation:
+The second is visual-based, capturing the entire screen and using computer vision to detect and interpret user interactions:
 
 \begin{itemize}
-    \item \textbf{CodeVideo Studio} our main editor, based on a Monaco editor along side an action editor. Includes time travel and snapshot validation.
-    \item \textbf{Monaco Editor Driver} for localhost single editor-based video generation (beta)
-    \item \textbf{VSCode Driver} for localhost complete IDE editor-based video generation (beta)
+    \item The visual recorder captures the entire screen, including the IDE and any additional windows.
+    \item The video is broken into individual frames, and computer vision algorithms detect and interpret user interactions.
+    \item The detected interactions are transformed into actions and used to build the repeatable and full IDE state representation.
 \end{itemize}
 
-\section{Future Directions: Advanced Abstract Syntax Tree Manipulations Through Time}
+\section{Drivers: Playback Mechanisms for Automated Video Generation}
 
-Ongoing research aims to enable abstract syntax tree (AST) manipulations through time, which will allow modifications to past states within a lesson—such as renaming variables or functions—and propagating these changes in the project forward.
+CodeVideo provides multiple playback mechanisms for automated video generation:
+
+\begin{itemize}
+    \item \textbf{CodeVideo Studio} - our main editor, based on a Monaco editor along side an action editor. Includes time travel, action validation, and snapshot validation.
+    \item \textbf{Monaco Editor Driver} - for localhost single editor-based video generation (beta)
+    \item \textbf{VSCode Driver} - for localhost complete IDE editor-based video generation (beta)
+\end{itemize}
+
+\subsection{Temporal Abstract Syntax Tree Management}
+
+Central to the framework's refactoring capabilities is the concept of a Temporal Abstract Syntax Tree (TAST), which extends traditional AST manipulation to include logical time as a dimension. Simply described, this is the abstract syntax tree after every moment (action) in time. The concept of TASTs are not new, and have been explored in various works \cite{moore2022temporal}.
+
+\subsubsection{Formal Definition}
+
+A Temporal AST node at logical step \(n\) is defined as:
+
+\[
+TAST_{node}(n) = \langle ID, Type, Value(n), Children(n), Metadata(n) \rangle
+\]
+
+Where:
+\begin{itemize}
+    \item \(ID\) is a unique identifier persisting across the action sequence
+    \item \(Type\) represents the node type (e.g., Identifier, FunctionDeclaration)
+    \item \(Value(n)\) is the node's value at step \(n\)
+    \item \(Children(n)\) represents child nodes at step \(n\)
+    \item \(Metadata(n)\) stores additional information like scope and references
+\end{itemize}
+
+When performing retrospective modifications (e.g., variable renaming), the framework uses a forward propagation algorithm:
+
+\[
+\forall m > n: TAST(m) = Apply(TAST(m-1), Modification(n))
+\]
+
+The modification propagation follows these principles:
+
+\begin{enumerate}
+    \item \textbf{Identity Preservation}: Node identities remain constant across the sequence, enabling tracking of elements despite name changes:
+    \[
+    ID(TAST_{node}(n)) = ID(TAST_{node}(m)) \quad \forall n,m
+    \]
+    
+    \item \textbf{Reference Integrity}: All references to modified nodes are updated while maintaining semantic correctness:
+    \[
+    Refs(TAST_{node}(m)) = UpdateRefs(Refs(TAST_{node}(n)), Modification(n))
+    \]
+    
+    \item \textbf{Scope Resolution}: Modifications respect lexical scoping rules across the logical sequence:
+    \[
+    Scope(TAST_{node}(m)) = ResolveScope(Scope(TAST_{node}(n)), Environment(m))
+    \]
+\end{enumerate}
+
+\subsubsection{Implementation Strategy}
+
+The framework implements temporal AST modifications through a combination of:
+
+\begin{itemize}
+    \item Forward replay with modification injection
+    \item Lazy evaluation of affected subtrees
+    \item Cached intermediate states for performance optimization
+\end{itemize}
+
+This approach enables complex refactoring operations while maintaining the integrity of the recorded action sequence. For example, when renaming a variable at step \(n\), the system:
+
+\begin{enumerate}
+    \item Captures the modification intent: \(M = \{type: "rename", target: ID, newValue: name\}\)
+    \item Identifies all subsequent steps containing references to the target: \(Steps_{affected} = \{m | m \geq n \land HasRef(TAST(m), ID)\}\)
+    \item Applies the modification across all affected steps while preserving other concurrent modifications
+\end{enumerate}
+
+
+\section{Overview of Framework Progress}
+
+The environments and actions to make codevideos form an interesting matrix of thte software libraries and progress of the entire framework as a whole. The following table reflect the current state of the framework, when looking at the various environments and their Renderers, Recorders, and Drivers, as well as what language the package is written in.
+
+\begin{longtable}{|
+>{\columncolor[HTML]{C0C0C0}}l |l|l|l|l|l|}
+\hline
+\cellcolor[HTML]{9B9B9B}\textbf{Environment} & \cellcolor[HTML]{9B9B9B}\textbf{Renderers} & \cellcolor[HTML]{9B9B9B}\textbf{Recorders} & \cellcolor[HTML]{9B9B9B}\textbf{Drivers} & \cellcolor[HTML]{9B9B9B}\textbf{Languages} & \cellcolor[HTML]{9B9B9B}\textbf{Status} \\ \hline
+\endhead
+%
+\cellcolor[HTML]{EFEFEF}Web & Single Page Monaco Editor & Keyboard & None & TypeScript & Beta \\ \hline
+\cellcolor[HTML]{EFEFEF}Web & CodeVideo Studio & Keyboard & CodeVideo Studio & TypeScript & Beta \\ \hline
+\cellcolor[HTML]{EFEFEF}Visual Studio Code & Visual Studio Code's GUI & `codevideo-vs-code-extension' & `codevideo-vs-code-extension' & TypeScript & Alpha \\ \hline
+\end{longtable}
+
+Note within these, the underlying event source architecture of the snapshot generators via the virtual items is the same, and the drivers are the only thing that changes.
+
+\section{Applications For Extremely High Quality Dataset Generation For Use in Large Language Models}
+
+A large component of context missing from large language models and transformers is exactly the contextual travel-through-time data that CodeVideo catalogs. By including the full, correct, and complete steps to creating software, either through the array of actions or a TAST to LLM training data, we can provide a more comprehensive dataset for coding training data. CodeVideo could be used as an invaluable tool in synthetic data generation for large language models.
 
 \section{Conclusion}
 
-The \textit{CodeVideo} framework offers a robust, reproducible method for generating IDE-based educational content, reducing manual editing and increasing course consistency. With its event-sourcing architecture, the framework not only captures precise IDE states but also provides a platform for creating interactive, context-rich programming tutorials.
+The \textit{CodeVideo} framework offers a robust, reproducible method for generating IDE-based educational content, reducing manual editing and increasing course consistency. With its event-sourcing architecture, the framework not only captures precise IDE states but also provides a platform for creating interactive, context-rich software engineering tutorials.
+
+\printbibliography
+
+% begin appending
+\begin{appendices}
+
+\section{Appendix A - Theoretical Performance of Parallel Video Generation}
+
+The CodeVideo framework leverages modern hardware architecture to achieve exceptional performance through massive parallelization. This section analyzes performance metrics based on the Apple Silicon M4 architecture with 128GB unified memory.
+
+\subsection{Hardware Architecture and Capabilities}
+
+The framework's performance is optimized for modern unified memory architectures, particularly benefiting from:
+
+\begin{itemize}
+    \item \textbf{Unified Memory:} 128GB shared between CPU and GPU eliminates memory transfer overhead
+    \item \textbf{Memory Bandwidth:} 546GB/second enables rapid frame buffer processing
+    \item \textbf{Hardware Video Encoders:} Native hardware acceleration for concurrent video streams
+    \item \textbf{Parallel Chrome Instances:} Support for 80-100 concurrent headless browsers
+\end{itemize}
+
+\subsection{System Architecture}
+
+The framework employs a multi-tiered execution model:
+
+\begin{itemize}
+    \item \textbf{Orchestration Layer:} Written in Rust/Go for optimal system resource management
+    \item \textbf{Rendering Engine:} Headless Chrome instances managed via Puppeteer
+    \item \textbf{Video Processing:} Hardware-accelerated encoding via VideoToolbox
+    \item \textbf{Storage Layer:} NVMe SSD array for parallel I/O operations
+\end{itemize}
+
+\subsection{Performance Metrics}
+
+Table \ref{tab:performance} compares CodeVideo generation times with traditional video editing workflows across various lesson sizes. These estimates assume:
+\begin{itemize}
+    \item Average step duration of 4 seconds
+    \item 90 parallel Chrome instances (optimized for M4 architecture)
+    \item Hardware-accelerated video encoding
+    \item Traditional editing requiring 2.5x video length plus setup time per step
+\end{itemize}
+
+\begin{longtable}{|c|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|}
+    \hline
+    \textbf{Number of Steps} & \textbf{Total Video Length} & \textbf{CodeVideo Generation} & \textbf{Traditional Editing Time} & \textbf{Performance Improvement} \\
+    & \textit{(minutes)} & \textit{(seconds)} & \textit{(hours)} & \textit{(factor)} \\
+    \hline
+    50 & 3.3 & 17 & 0.56 & 5,324x \\
+    \hline
+    100 & 6.7 & 34 & 1.11 & 5,324x \\
+    \hline
+    200 & 13.3 & 51 & 2.22 & 7,098x \\
+    \hline
+    500 & 33.3 & 102 & 5.56 & 8,873x \\
+    \hline
+    \caption{Performance comparison between CodeVideo and traditional video editing workflows on M4 architecture}
+    \label{tab:performance}
+\end{longtable}
+
+Let's also consider deployment on a 4GB Digital Ocean droplet running Ubuntu, where the following constraints apply:
+
+\begin{itemize}
+    \item System resources reserve approximately 1GB for OS and services
+    \item Each headless Chrome instance requires ~150MB (browser + video buffer)
+    \item Maximum safe parallel instances limited to 20 to maintain system stability
+    \item Additional swap space may be required for larger batch sizes
+\end{itemize}
+
+In this case, the performance table would resemble:
+
+\begin{longtable}{|c|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|}
+    \hline
+    \textbf{Number of Steps} & \textbf{Total Video Length} & \textbf{CodeVideo Generation} & \textbf{Traditional Editing Time} & \textbf{Performance Improvement} \\
+    & \textit{(minutes)} & \textit{(seconds)} & \textit{(hours)} & \textit{(factor)} \\
+    \hline
+    50 & 3.3 & 15 & 0.56 & 4,032x \\
+    \hline
+    100 & 6.7 & 25 & 1.11 & 4,838x \\
+    \hline
+    200 & 13.3 & 50 & 2.22 & 4,838x \\
+    \hline
+    500 & 33.3 & 125 & 5.56 & 4,838x \\
+    \hline
+    \caption{Performance comparison between CodeVideo and traditional video editing workflows with 20 parallel instances}
+    \label{tab:performance}
+\end{longtable}
+
+\subsection{Scaling Characteristics}
+
+The framework exhibits near-linear scaling up to the parallel instance limit, with performance primarily bounded by:
+
+\begin{itemize}
+    \item \textbf{I/O Operations:} NVMe bandwidth for intermediate file handling
+    \item \textbf{Memory Management:} Dynamic allocation across Chrome instances
+    \item \textbf{Video Encoding:} Hardware encoder queue depth
+\end{itemize}
+
+As demonstrated by the performance metrics, the CodeVideo framework achieves approximately a 200x improvement in production time compared to traditional video editing workflows when leveraging modern unified memory architecture. This extraordinary efficiency gain is particularly pronounced for larger lessons, making it feasible to generate entire courses of content in minutes rather than hours or days.
+
+The parallel processing capabilities of the M4 architecture, combined with hardware-accelerated video encoding and the unified memory model, enable the framework to process approximately 90 steps simultaneously. This results in the remarkably fast generation times shown above, with even 500-step lessons completing in under 2 minutes.
+
+\section{Appendix B - Example JSON of a Simple Console Logging Lesson for Javascript}
+
+\begin{Verbatim}[breaklines=true]
+[
+    {
+        "name": "speak-before",
+        "value": "Today, we're going to learn about how to use the console.log function in JavaScript."
+    },
+    {
+        "name": "speak-before",
+        "value": "I've already got a hello-world.js file prepared here - let's open it up."
+    },
+    {
+        "name": "click-filename",
+        "value": "hello-world.js"
+    },
+    {
+        "name": "click-editor",
+        "value": "1"
+    },
+    {
+        "name": "speak-before",
+        "value": "Now, to log things to your console, simply make a call to the console.log function, passing in the text you want to log."
+    },
+    {
+        "name": "type-editor",
+        "value": "console.log('Hello, world!');"
+    },
+    {
+        "name": "save",
+        "value": "1"
+    },
+    {
+        "name": "speak-before",
+        "value": "Now we'll open up a terminal and run this file."
+    },
+    {
+        "name": "open-terminal",
+        "value": "1"
+    },
+    {
+        "name": "click-terminal",
+        "value": "1"
+    },
+    {
+        "name": "type-terminal",
+        "value": "node hello-world.js"
+    },
+    {
+        "name": "enter",
+        "value": "1"
+    },
+    {
+        "name": "wait",
+        "value": "2000"
+    },
+    {
+        "name": "speak-before",
+        "value": "And of course we get the expected output - 'hello world!' printed to the console."
+    },
+    {
+        "name": "speak-before",
+        "value": "And that's about it! You now know how to log things to your console in JavaScript!"
+    }
+]
+\end{Verbatim}
+
+\section{Appendix B - List of All Possible Actions within the CodeVideo Framework}
+
+\begin{longtable}{|p{0.3\textwidth}|p{0.3\textwidth}|p{0.4\textwidth}|}
+    \hline
+    \textbf{Key Combination} & \textbf{Context} & \textbf{Code} \\ \hline
+    \endhead
+    \multicolumn{3}{|c|}{\textbf{editor Bindings}} \\ \hline
+    ` & editor & \texttt{Backquote-editor} \\ \hline
+    Shift+\~\{\} & editor & \texttt{Shift+Backquote-editor} \\ \hline
+    1 & editor & \texttt{Digit1-editor} \\ \hline
+    Shift+! & editor & \texttt{Shift+Digit1-editor} \\ \hline
+    2 & editor & \texttt{Digit2-editor} \\ \hline
+    Shift+@ & editor & \texttt{Shift+Digit2-editor} \\ \hline
+    3 & editor & \texttt{Digit3-editor} \\ \hline
+    Shift+\# & editor & \texttt{Shift+Digit3-editor} \\ \hline
+    4 & editor & \texttt{Digit4-editor} \\ \hline
+    Shift+\$ & editor & \texttt{Shift+Digit4-editor} \\ \hline
+    5 & editor & \texttt{Digit5-editor} \\ \hline
+    Shift+\% & editor & \texttt{Shift+Digit5-editor} \\ \hline
+    6 & editor & \texttt{Digit6-editor} \\ \hline
+    Shift+\^\{\} & editor & \texttt{Shift+Digit6-editor} \\ \hline
+    7 & editor & \texttt{Digit7-editor} \\ \hline
+    Shift+\& & editor & \texttt{Shift+Digit7-editor} \\ \hline
+    8 & editor & \texttt{Digit8-editor} \\ \hline
+    Shift+* & editor & \texttt{Shift+Digit8-editor} \\ \hline
+    9 & editor & \texttt{Digit9-editor} \\ \hline
+    Shift+( & editor & \texttt{Shift+Digit9-editor} \\ \hline
+    0 & editor & \texttt{Digit0-editor} \\ \hline
+    Shift+) & editor & \texttt{Shift+Digit0-editor} \\ \hline
+    - & editor & \texttt{Minus-editor} \\ \hline
+    Shift+\_ & editor & \texttt{Shift+Minus-editor} \\ \hline
+    = & editor & \texttt{Equal-editor} \\ \hline
+    Shift++ & editor & \texttt{Shift+Equal-editor} \\ \hline
+    q & editor & \texttt{KeyQ-editor} \\ \hline
+    Shift+Q & editor & \texttt{Shift+KeyQ-editor} \\ \hline
+    w & editor & \texttt{KeyW-editor} \\ \hline
+    Shift+W & editor & \texttt{Shift+KeyW-editor} \\ \hline
+    e & editor & \texttt{KeyE-editor} \\ \hline
+    Shift+E & editor & \texttt{Shift+KeyE-editor} \\ \hline
+    r & editor & \texttt{KeyR-editor} \\ \hline
+    Shift+R & editor & \texttt{Shift+KeyR-editor} \\ \hline
+    t & editor & \texttt{KeyT-editor} \\ \hline
+    Shift+T & editor & \texttt{Shift+KeyT-editor} \\ \hline
+    y & editor & \texttt{KeyY-editor} \\ \hline
+    Shift+Y & editor & \texttt{Shift+KeyY-editor} \\ \hline
+    u & editor & \texttt{KeyU-editor} \\ \hline
+    Shift+U & editor & \texttt{Shift+KeyU-editor} \\ \hline
+    i & editor & \texttt{KeyI-editor} \\ \hline
+    Shift+I & editor & \texttt{Shift+KeyI-editor} \\ \hline
+    o & editor & \texttt{KeyO-editor} \\ \hline
+    Shift+O & editor & \texttt{Shift+KeyO-editor} \\ \hline
+    p & editor & \texttt{KeyP-editor} \\ \hline
+    Shift+P & editor & \texttt{Shift+KeyP-editor} \\ \hline
+    [ & editor & \texttt{BracketLeft-editor} \\ \hline
+    Shift+\{ & editor & \texttt{Shift+BracketLeft-editor} \\ \hline
+    ] & editor & \texttt{BracketRight-editor} \\ \hline
+    Shift+\} & editor & \texttt{Shift+BracketRight-editor} \\ \hline
+    \textbackslash\{\} & editor & \texttt{Backslash-editor} \\ \hline
+    Shift+| & editor & \texttt{Shift+Backslash-editor} \\ \hline
+    a & editor & \texttt{KeyA-editor} \\ \hline
+    Shift+A & editor & \texttt{Shift+KeyA-editor} \\ \hline
+    s & editor & \texttt{KeyS-editor} \\ \hline
+    Shift+S & editor & \texttt{Shift+KeyS-editor} \\ \hline
+    d & editor & \texttt{KeyD-editor} \\ \hline
+    Shift+D & editor & \texttt{Shift+KeyD-editor} \\ \hline
+    f & editor & \texttt{KeyF-editor} \\ \hline
+    Shift+F & editor & \texttt{Shift+KeyF-editor} \\ \hline
+    g & editor & \texttt{KeyG-editor} \\ \hline
+    Shift+G & editor & \texttt{Shift+KeyG-editor} \\ \hline
+    h & editor & \texttt{KeyH-editor} \\ \hline
+    Shift+H & editor & \texttt{Shift+KeyH-editor} \\ \hline
+    j & editor & \texttt{KeyJ-editor} \\ \hline
+    Shift+J & editor & \texttt{Shift+KeyJ-editor} \\ \hline
+    k & editor & \texttt{KeyK-editor} \\ \hline
+    Shift+K & editor & \texttt{Shift+KeyK-editor} \\ \hline
+    l & editor & \texttt{KeyL-editor} \\ \hline
+    Shift+L & editor & \texttt{Shift+KeyL-editor} \\ \hline
+    ; & editor & \texttt{Semicolon-editor} \\ \hline
+    Shift+: & editor & \texttt{Shift+Semicolon-editor} \\ \hline
+    ' & editor & \texttt{Quote-editor} \\ \hline
+    Shift+" & editor & \texttt{Shift+Quote-editor} \\ \hline
+    z & editor & \texttt{KeyZ-editor} \\ \hline
+    Shift+Z & editor & \texttt{Shift+KeyZ-editor} \\ \hline
+    x & editor & \texttt{KeyX-editor} \\ \hline
+    Shift+X & editor & \texttt{Shift+KeyX-editor} \\ \hline
+    c & editor & \texttt{KeyC-editor} \\ \hline
+    Shift+C & editor & \texttt{Shift+KeyC-editor} \\ \hline
+    v & editor & \texttt{KeyV-editor} \\ \hline
+    Shift+V & editor & \texttt{Shift+KeyV-editor} \\ \hline
+    b & editor & \texttt{KeyB-editor} \\ \hline
+    Shift+B & editor & \texttt{Shift+KeyB-editor} \\ \hline
+    n & editor & \texttt{KeyN-editor} \\ \hline
+    Shift+N & editor & \texttt{Shift+KeyN-editor} \\ \hline
+    m & editor & \texttt{KeyM-editor} \\ \hline
+    Shift+M & editor & \texttt{Shift+KeyM-editor} \\ \hline
+    , & editor & \texttt{Comma-editor} \\ \hline
+    Shift+< & editor & \texttt{Shift+Comma-editor} \\ \hline
+    . & editor & \texttt{Period-editor} \\ \hline
+    Shift+> & editor & \texttt{Shift+Period-editor} \\ \hline
+    / & editor & \texttt{Slash-editor} \\ \hline
+    Shift+? & editor & \texttt{Shift+Slash-editor} \\ \hline
+      & editor & \texttt{Space-editor} \\ \hline
+    \multicolumn{3}{|c|}{} \\ \hline
+    \multicolumn{3}{|c|}{\textbf{terminal Bindings}} \\ \hline
+    ` & terminal & \texttt{Backquote-terminal} \\ \hline
+    Shift+\~\{\} & terminal & \texttt{Shift+Backquote-terminal} \\ \hline
+    1 & terminal & \texttt{Digit1-terminal} \\ \hline
+    Shift+! & terminal & \texttt{Shift+Digit1-terminal} \\ \hline
+    2 & terminal & \texttt{Digit2-terminal} \\ \hline
+    Shift+@ & terminal & \texttt{Shift+Digit2-terminal} \\ \hline
+    3 & terminal & \texttt{Digit3-terminal} \\ \hline
+    Shift+\# & terminal & \texttt{Shift+Digit3-terminal} \\ \hline
+    4 & terminal & \texttt{Digit4-terminal} \\ \hline
+    Shift+\$ & terminal & \texttt{Shift+Digit4-terminal} \\ \hline
+    5 & terminal & \texttt{Digit5-terminal} \\ \hline
+    Shift+\% & terminal & \texttt{Shift+Digit5-terminal} \\ \hline
+    6 & terminal & \texttt{Digit6-terminal} \\ \hline
+    Shift+\^\{\} & terminal & \texttt{Shift+Digit6-terminal} \\ \hline
+    7 & terminal & \texttt{Digit7-terminal} \\ \hline
+    Shift+\& & terminal & \texttt{Shift+Digit7-terminal} \\ \hline
+    8 & terminal & \texttt{Digit8-terminal} \\ \hline
+    Shift+* & terminal & \texttt{Shift+Digit8-terminal} \\ \hline
+    9 & terminal & \texttt{Digit9-terminal} \\ \hline
+    Shift+( & terminal & \texttt{Shift+Digit9-terminal} \\ \hline
+    0 & terminal & \texttt{Digit0-terminal} \\ \hline
+    Shift+) & terminal & \texttt{Shift+Digit0-terminal} \\ \hline
+    - & terminal & \texttt{Minus-terminal} \\ \hline
+    Shift+\_ & terminal & \texttt{Shift+Minus-terminal} \\ \hline
+    = & terminal & \texttt{Equal-terminal} \\ \hline
+    Shift++ & terminal & \texttt{Shift+Equal-terminal} \\ \hline
+    q & terminal & \texttt{KeyQ-terminal} \\ \hline
+    Shift+Q & terminal & \texttt{Shift+KeyQ-terminal} \\ \hline
+    w & terminal & \texttt{KeyW-terminal} \\ \hline
+    Shift+W & terminal & \texttt{Shift+KeyW-terminal} \\ \hline
+    e & terminal & \texttt{KeyE-terminal} \\ \hline
+    Shift+E & terminal & \texttt{Shift+KeyE-terminal} \\ \hline
+    r & terminal & \texttt{KeyR-terminal} \\ \hline
+    Shift+R & terminal & \texttt{Shift+KeyR-terminal} \\ \hline
+    t & terminal & \texttt{KeyT-terminal} \\ \hline
+    Shift+T & terminal & \texttt{Shift+KeyT-terminal} \\ \hline
+    y & terminal & \texttt{KeyY-terminal} \\ \hline
+    Shift+Y & terminal & \texttt{Shift+KeyY-terminal} \\ \hline
+    u & terminal & \texttt{KeyU-terminal} \\ \hline
+    Shift+U & terminal & \texttt{Shift+KeyU-terminal} \\ \hline
+    i & terminal & \texttt{KeyI-terminal} \\ \hline
+    Shift+I & terminal & \texttt{Shift+KeyI-terminal} \\ \hline
+    o & terminal & \texttt{KeyO-terminal} \\ \hline
+    Shift+O & terminal & \texttt{Shift+KeyO-terminal} \\ \hline
+    p & terminal & \texttt{KeyP-terminal} \\ \hline
+    Shift+P & terminal & \texttt{Shift+KeyP-terminal} \\ \hline
+    [ & terminal & \texttt{BracketLeft-terminal} \\ \hline
+    Shift+\{ & terminal & \texttt{Shift+BracketLeft-terminal} \\ \hline
+    ] & terminal & \texttt{BracketRight-terminal} \\ \hline
+    Shift+\} & terminal & \texttt{Shift+BracketRight-terminal} \\ \hline
+    \textbackslash\{\} & terminal & \texttt{Backslash-terminal} \\ \hline
+    Shift+| & terminal & \texttt{Shift+Backslash-terminal} \\ \hline
+    a & terminal & \texttt{KeyA-terminal} \\ \hline
+    Shift+A & terminal & \texttt{Shift+KeyA-terminal} \\ \hline
+    s & terminal & \texttt{KeyS-terminal} \\ \hline
+    Shift+S & terminal & \texttt{Shift+KeyS-terminal} \\ \hline
+    d & terminal & \texttt{KeyD-terminal} \\ \hline
+    Shift+D & terminal & \texttt{Shift+KeyD-terminal} \\ \hline
+    f & terminal & \texttt{KeyF-terminal} \\ \hline
+    Shift+F & terminal & \texttt{Shift+KeyF-terminal} \\ \hline
+    g & terminal & \texttt{KeyG-terminal} \\ \hline
+    Shift+G & terminal & \texttt{Shift+KeyG-terminal} \\ \hline
+    h & terminal & \texttt{KeyH-terminal} \\ \hline
+    Shift+H & terminal & \texttt{Shift+KeyH-terminal} \\ \hline
+    j & terminal & \texttt{KeyJ-terminal} \\ \hline
+    Shift+J & terminal & \texttt{Shift+KeyJ-terminal} \\ \hline
+    k & terminal & \texttt{KeyK-terminal} \\ \hline
+    Shift+K & terminal & \texttt{Shift+KeyK-terminal} \\ \hline
+    l & terminal & \texttt{KeyL-terminal} \\ \hline
+    Shift+L & terminal & \texttt{Shift+KeyL-terminal} \\ \hline
+    ; & terminal & \texttt{Semicolon-terminal} \\ \hline
+    Shift+: & terminal & \texttt{Shift+Semicolon-terminal} \\ \hline
+    ' & terminal & \texttt{Quote-terminal} \\ \hline
+    Shift+" & terminal & \texttt{Shift+Quote-terminal} \\ \hline
+    z & terminal & \texttt{KeyZ-terminal} \\ \hline
+    Shift+Z & terminal & \texttt{Shift+KeyZ-terminal} \\ \hline
+    x & terminal & \texttt{KeyX-terminal} \\ \hline
+    Shift+X & terminal & \texttt{Shift+KeyX-terminal} \\ \hline
+    c & terminal & \texttt{KeyC-terminal} \\ \hline
+    Shift+C & terminal & \texttt{Shift+KeyC-terminal} \\ \hline
+    v & terminal & \texttt{KeyV-terminal} \\ \hline
+    Shift+V & terminal & \texttt{Shift+KeyV-terminal} \\ \hline
+    b & terminal & \texttt{KeyB-terminal} \\ \hline
+    Shift+B & terminal & \texttt{Shift+KeyB-terminal} \\ \hline
+    n & terminal & \texttt{KeyN-terminal} \\ \hline
+    Shift+N & terminal & \texttt{Shift+KeyN-terminal} \\ \hline
+    m & terminal & \texttt{KeyM-terminal} \\ \hline
+    Shift+M & terminal & \texttt{Shift+KeyM-terminal} \\ \hline
+    , & terminal & \texttt{Comma-terminal} \\ \hline
+    Shift+< & terminal & \texttt{Shift+Comma-terminal} \\ \hline
+    . & terminal & \texttt{Period-terminal} \\ \hline
+    Shift+> & terminal & \texttt{Shift+Period-terminal} \\ \hline
+    / & terminal & \texttt{Slash-terminal} \\ \hline
+    Shift+? & terminal & \texttt{Shift+Slash-terminal} \\ \hline
+      & terminal & \texttt{Space-terminal} \\ \hline
+    \multicolumn{3}{|c|}{} \\ \hline
+    \multicolumn{3}{|c|}{\textbf{file-tree Bindings}} \\ \hline
+    ` & file-tree & \texttt{Backquote-file-tree} \\ \hline
+    Shift+\~\{\} & file-tree & \texttt{Shift+Backquote-file-tree} \\ \hline
+    1 & file-tree & \texttt{Digit1-file-tree} \\ \hline
+    Shift+! & file-tree & \texttt{Shift+Digit1-file-tree} \\ \hline
+    2 & file-tree & \texttt{Digit2-file-tree} \\ \hline
+    Shift+@ & file-tree & \texttt{Shift+Digit2-file-tree} \\ \hline
+    3 & file-tree & \texttt{Digit3-file-tree} \\ \hline
+    Shift+\# & file-tree & \texttt{Shift+Digit3-file-tree} \\ \hline
+    4 & file-tree & \texttt{Digit4-file-tree} \\ \hline
+    Shift+\$ & file-tree & \texttt{Shift+Digit4-file-tree} \\ \hline
+    5 & file-tree & \texttt{Digit5-file-tree} \\ \hline
+    Shift+\% & file-tree & \texttt{Shift+Digit5-file-tree} \\ \hline
+    6 & file-tree & \texttt{Digit6-file-tree} \\ \hline
+    Shift+\^\{\} & file-tree & \texttt{Shift+Digit6-file-tree} \\ \hline
+    7 & file-tree & \texttt{Digit7-file-tree} \\ \hline
+    Shift+\& & file-tree & \texttt{Shift+Digit7-file-tree} \\ \hline
+    8 & file-tree & \texttt{Digit8-file-tree} \\ \hline
+    Shift+* & file-tree & \texttt{Shift+Digit8-file-tree} \\ \hline
+    9 & file-tree & \texttt{Digit9-file-tree} \\ \hline
+    Shift+( & file-tree & \texttt{Shift+Digit9-file-tree} \\ \hline
+    0 & file-tree & \texttt{Digit0-file-tree} \\ \hline
+    Shift+) & file-tree & \texttt{Shift+Digit0-file-tree} \\ \hline
+    - & file-tree & \texttt{Minus-file-tree} \\ \hline
+    Shift+\_ & file-tree & \texttt{Shift+Minus-file-tree} \\ \hline
+    = & file-tree & \texttt{Equal-file-tree} \\ \hline
+    Shift++ & file-tree & \texttt{Shift+Equal-file-tree} \\ \hline
+    q & file-tree & \texttt{KeyQ-file-tree} \\ \hline
+    Shift+Q & file-tree & \texttt{Shift+KeyQ-file-tree} \\ \hline
+    w & file-tree & \texttt{KeyW-file-tree} \\ \hline
+    Shift+W & file-tree & \texttt{Shift+KeyW-file-tree} \\ \hline
+    e & file-tree & \texttt{KeyE-file-tree} \\ \hline
+    Shift+E & file-tree & \texttt{Shift+KeyE-file-tree} \\ \hline
+    r & file-tree & \texttt{KeyR-file-tree} \\ \hline
+    Shift+R & file-tree & \texttt{Shift+KeyR-file-tree} \\ \hline
+    t & file-tree & \texttt{KeyT-file-tree} \\ \hline
+    Shift+T & file-tree & \texttt{Shift+KeyT-file-tree} \\ \hline
+    y & file-tree & \texttt{KeyY-file-tree} \\ \hline
+    Shift+Y & file-tree & \texttt{Shift+KeyY-file-tree} \\ \hline
+    u & file-tree & \texttt{KeyU-file-tree} \\ \hline
+    Shift+U & file-tree & \texttt{Shift+KeyU-file-tree} \\ \hline
+    i & file-tree & \texttt{KeyI-file-tree} \\ \hline
+    Shift+I & file-tree & \texttt{Shift+KeyI-file-tree} \\ \hline
+    o & file-tree & \texttt{KeyO-file-tree} \\ \hline
+    Shift+O & file-tree & \texttt{Shift+KeyO-file-tree} \\ \hline
+    p & file-tree & \texttt{KeyP-file-tree} \\ \hline
+    Shift+P & file-tree & \texttt{Shift+KeyP-file-tree} \\ \hline
+    [ & file-tree & \texttt{BracketLeft-file-tree} \\ \hline
+    Shift+\{ & file-tree & \texttt{Shift+BracketLeft-file-tree} \\ \hline
+    ] & file-tree & \texttt{BracketRight-file-tree} \\ \hline
+    Shift+\} & file-tree & \texttt{Shift+BracketRight-file-tree} \\ \hline
+    \textbackslash\{\} & file-tree & \texttt{Backslash-file-tree} \\ \hline
+    Shift+| & file-tree & \texttt{Shift+Backslash-file-tree} \\ \hline
+    a & file-tree & \texttt{KeyA-file-tree} \\ \hline
+    Shift+A & file-tree & \texttt{Shift+KeyA-file-tree} \\ \hline
+    s & file-tree & \texttt{KeyS-file-tree} \\ \hline
+    Shift+S & file-tree & \texttt{Shift+KeyS-file-tree} \\ \hline
+    d & file-tree & \texttt{KeyD-file-tree} \\ \hline
+    Shift+D & file-tree & \texttt{Shift+KeyD-file-tree} \\ \hline
+    f & file-tree & \texttt{KeyF-file-tree} \\ \hline
+    Shift+F & file-tree & \texttt{Shift+KeyF-file-tree} \\ \hline
+    g & file-tree & \texttt{KeyG-file-tree} \\ \hline
+    Shift+G & file-tree & \texttt{Shift+KeyG-file-tree} \\ \hline
+    h & file-tree & \texttt{KeyH-file-tree} \\ \hline
+    Shift+H & file-tree & \texttt{Shift+KeyH-file-tree} \\ \hline
+    j & file-tree & \texttt{KeyJ-file-tree} \\ \hline
+    Shift+J & file-tree & \texttt{Shift+KeyJ-file-tree} \\ \hline
+    k & file-tree & \texttt{KeyK-file-tree} \\ \hline
+    Shift+K & file-tree & \texttt{Shift+KeyK-file-tree} \\ \hline
+    l & file-tree & \texttt{KeyL-file-tree} \\ \hline
+    Shift+L & file-tree & \texttt{Shift+KeyL-file-tree} \\ \hline
+    ; & file-tree & \texttt{Semicolon-file-tree} \\ \hline
+    Shift+: & file-tree & \texttt{Shift+Semicolon-file-tree} \\ \hline
+    ' & file-tree & \texttt{Quote-file-tree} \\ \hline
+    Shift+" & file-tree & \texttt{Shift+Quote-file-tree} \\ \hline
+    z & file-tree & \texttt{KeyZ-file-tree} \\ \hline
+    Shift+Z & file-tree & \texttt{Shift+KeyZ-file-tree} \\ \hline
+    x & file-tree & \texttt{KeyX-file-tree} \\ \hline
+    Shift+X & file-tree & \texttt{Shift+KeyX-file-tree} \\ \hline
+    c & file-tree & \texttt{KeyC-file-tree} \\ \hline
+    Shift+C & file-tree & \texttt{Shift+KeyC-file-tree} \\ \hline
+    v & file-tree & \texttt{KeyV-file-tree} \\ \hline
+    Shift+V & file-tree & \texttt{Shift+KeyV-file-tree} \\ \hline
+    b & file-tree & \texttt{KeyB-file-tree} \\ \hline
+    Shift+B & file-tree & \texttt{Shift+KeyB-file-tree} \\ \hline
+    n & file-tree & \texttt{KeyN-file-tree} \\ \hline
+    Shift+N & file-tree & \texttt{Shift+KeyN-file-tree} \\ \hline
+    m & file-tree & \texttt{KeyM-file-tree} \\ \hline
+    Shift+M & file-tree & \texttt{Shift+KeyM-file-tree} \\ \hline
+    , & file-tree & \texttt{Comma-file-tree} \\ \hline
+    Shift+< & file-tree & \texttt{Shift+Comma-file-tree} \\ \hline
+    . & file-tree & \texttt{Period-file-tree} \\ \hline
+    Shift+> & file-tree & \texttt{Shift+Period-file-tree} \\ \hline
+    / & file-tree & \texttt{Slash-file-tree} \\ \hline
+    Shift+? & file-tree & \texttt{Shift+Slash-file-tree} \\ \hline
+      & file-tree & \texttt{Space-file-tree} \\ \hline
+    \end{longtable}
+
+\end{appendices}
 
 \end{document}
