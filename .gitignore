@@ -2,3 +2,8 @@
 *.log
 *.synctex.gz
 *.toc
+*.out
+*.bcf
+*.bbl
+*.run.xml
+*.DS_Store
