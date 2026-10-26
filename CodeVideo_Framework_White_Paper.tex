@@ -138,9 +138,9 @@ Where:
 
 Note that the domains need not be specifically related to an IDE. The CodeVideo framework supports browser previews of websites (the `external' domain), as well as slide presentations (the `slide' domain).
 
-Appendix A provides a sample of a series of actions, representing a Console Logging Lesson for JavaScript.
+Appendix~\ref{app:example-json} provides a sample of a series of actions, representing a Console Logging Lesson for JavaScript.
 
-Appendix B provides all possible action names within the CodeVideo framework.
+Appendix~\ref{app:actions} provides all possible action names within the CodeVideo framework.
 
 % A mac magic keyboard with number pad has 109 keys
 
@@ -205,6 +205,7 @@ In both cases, these composite actions can be broken down into their respective 
 \end{itemize}
 
 \section{Snapshots: Capturing the Full IDE State}
+\label{sec:snapshots}
 
 Snapshots represent the entire state of the IDE at a given point, allowing for precise rollback and reproducibility:
 \begin{align*}
@@ -257,18 +258,48 @@ The rendering engine, \textit{CodeVideo Studio} (https://studio.codevideo.io), p
 \section{Generators: Converting Courses, Lessons, and Actions into a Variety of Multimedia Formats}
 
 \subsection{Parallel Video Generation}
+\label{sec:parallel}
 
-With a 100\% reconstituable IDE state, the framework can generate multiple videos in parallel and stitch them together flawless at the end. 
+Because a lesson is an ordered list of actions, its video can be rendered in pieces and joined. The joins are invisible only if two conditions hold. Every piece must place each action on exactly the frame an uninterrupted render would use, and every piece must start from exactly the screen an uninterrupted render would show at that frame. \textit{CodeVideo} satisfies both conditions in an experimental \textit{deterministic} render mode. Realtime screen capture remains the default.
 
-As an example, consider a 200 step lesson. Via the CodeVideo framework, this lesson can be broken into 200 separate single action videos. However, we require that a complete course snapshot after applying each action is applied. In other words, we require:
+\paragraph{Deterministic time.} In deterministic mode the browser runs on a virtual clock. Timers, animation frames, the date and performance clocks, and CSS animations advance only when the renderer steps the clock, one frame of $1000/60$ milliseconds at a time. Pending work settles before each capture, so frame $f$ always shows the state at virtual time $\tau(f) = 1000f/60$ ms, regardless of how long the capture takes. A single \textit{planning pass} plays the lesson once on this clock and records the exact time of every action, mouse path and speech cue.
+
+\paragraph{Render checkpoints.} The snapshot $S$ of Section~\ref{sec:snapshots} describes logical state, which replaying the actions reconstitutes exactly ($S_n = S_{n-1} + a_n$). It does not determine the picture. The same files and terminal output can appear with a different editor scroll position or selection, with a menu open, or with a scrollbar halfway through fading out. During planning the renderer therefore saves \textit{render checkpoints} taken from the running editor instead of derived from $S$:
 
 \[
-S_{n} = S_{n-1} + a_{n}
+C_k = \langle S_k, V_k, \kappa_k, t_k \rangle
 \]
 
-Where \(S_{n}\) is the snapshot of the IDE after applying action \(a_{n}\) to the previous snapshot \(S_{n-1}\).
+Where:
 
-From a software architecture standpoint, the framework would then generate these 200 short videos in parallel (or as concurrently as the hardware allows) and can then be stitched together to create a single video that represents the entire lesson. See Appendix A for a theoretical performance analysis of parallel video generation.
+\begin{itemize}
+    \item \(S_k\) is the logical IDE state, as in Section~\ref{sec:snapshots}.
+    \item \(V_k\) is the presentation state: each tab's editor scroll position and selections, the layout, open menus, dialogs and text inputs, slide overlays, the mouse position and target, and the time remaining on transitions such as a fading scrollbar or the terminal caret.
+    \item \(\kappa_k\) is the execution cursor: the next action and, inside a typing or wait action, the character offset, the step within that character, any typo awaiting correction and the absolute deadline of the current wait.
+    \item \(t_k\) is the absolute virtual time.
+\end{itemize}
+
+Checkpoints are offered at every action boundary and, inside typing and wait actions, at most once per 500 ms of virtual time. One is saved only when nothing is in motion: no mouse movement or CSS animation may be in flight. Points inside actions matter because a single action can dominate a lesson. The Short Video of Appendix~\ref{app:performance} spends 15 of its 29 seconds in one typing action, and mid-action points raise its checkpoints from 13 to 56. Each checkpoint carries a fingerprint of the project, render settings and seed, plus a checksum, and a worker refuses any checkpoint that does not match.
+
+\paragraph{Addressable randomness.} Mouse paths, typing cadence and optional typos are random but seeded. Instead of drawing from one sequential stream, each choice comes from a generator seeded by its own coordinates:
+
+\[
+r = \mathrm{PRNG}\big(H(\mathit{seed}, \ell, i, o, p)\big)
+\]
+
+where \(\ell\) is the lesson, \(i\) the action index, \(o\) the character offset within a typing action (omitted for other actions) and \(p\) the purpose of the draw, such as a mouse curve, a delay, or whether to make a typo. Here \(H\) is the FNV-1a hash and PRNG the Mulberry32 generator. A worker that resumes at character \(o\) therefore makes the same choices as one that typed every earlier character, and no choice depends on how the video is split.
+
+\paragraph{Segments.} With \(W\) workers, the renderer cuts the timeline at checkpoints into at most \(W\) contiguous, half-open frame ranges \([f_j, f_{j+1})\). A checkpoint at virtual time \(t\) opens its range at frame \(\lceil 60t/1000 \rceil\). Cuts are chosen to minimize the longest range:
+
+\[
+\min_{\text{cuts}} \; \max_{j} \; (f_{j+1} - f_j)
+\]
+
+Each worker restores its checkpoint, starts the clock at \(t_k\) on the same global frame grid, renders its range and stops at the next cut. Its action, mouse and speech events must match the planning trace, or the job fails. The encoded segments are concatenated in frame order without re-encoding. Narration is mixed once over the planning timeline, so speech that crosses a cut remains a single cue. When there are fewer checkpoints than workers, fewer workers run.
+
+Segments follow the machine rather than the action list. In our measurements each worker spent roughly 4 to 13 seconds starting a browser and editor, at least as long as a typical action, so a few balanced segments cost far less than one worker per action.
+
+In our tests, renders with one, two, four and eight workers produce bit-identical source frames and identical event traces. On our test machine the fastest configurations render the Short Video 2.11 times faster than realtime capture (four workers) and the Long Video 3.66 times faster (eight workers). Appendix~\ref{app:performance} gives the measurements and their limits.
 
 \subsection{PNG Snapshots}
 
@@ -410,102 +441,103 @@ The \textit{CodeVideo} framework offers a robust, reproducible method for genera
 % begin appending
 \begin{appendices}
 
-\section{Appendix A - Theoretical Performance of Parallel Video Generation}
+\section{Measured Performance of Parallel Video Generation}
+\label{app:performance}
 
-The CodeVideo framework leverages modern hardware architecture to achieve exceptional performance through massive parallelization. This section analyzes performance metrics based on the Apple Silicon M4 architecture with 128GB unified memory.
+This appendix compares the deterministic parallel renderer of Section~\ref{sec:parallel} with realtime capture, the default renderer. Every figure is the wall-clock time of a complete render, from the command-line start to a finished MP4 file.
 
-\subsection{Hardware Architecture and Capabilities}
+\subsection{Method}
 
-The framework's performance is optimized for modern unified memory architectures, particularly benefiting from:
-
-\begin{itemize}
-    \item \textbf{Unified Memory:} 128GB shared between CPU and GPU eliminates memory transfer overhead
-    \item \textbf{Memory Bandwidth:} 546GB/second enables rapid frame buffer processing
-    \item \textbf{Hardware Video Encoders:} Native hardware acceleration for concurrent video streams
-    \item \textbf{Parallel Chrome Instances:} Support for 80-100 concurrent headless browsers
-\end{itemize}
-
-\subsection{System Architecture}
-
-The framework employs a multi-tiered execution model:
+All measurements were taken on one machine: an Apple M3 Max with 16 logical CPUs and 64~GiB of memory, running macOS and Node.js 23.11. Each render produces 1920$\times$1080 video at 60 frames per second from a fixed seed, without narration or web previews. Two example lessons were rendered:
 
 \begin{itemize}
-    \item \textbf{Orchestration Layer:} Written in Rust/Go for optimal system resource management
-    \item \textbf{Rendering Engine:} Headless Chrome instances managed via Puppeteer
-    \item \textbf{Video Processing:} Hardware-accelerated encoding via VideoToolbox
-    \item \textbf{Storage Layer:} NVMe SSD array for parallel I/O operations
+    \item \textbf{Short Video}: 14 actions that create and open a file, type into it for 15 seconds, scroll, type a terminal command and finish on a slide. Its timeline is 28.65 seconds, or 1,719 frames.
+    \item \textbf{Long Video}: 87 actions that build a small TypeScript task tracker from an empty folder. It types 4,541 characters into five files and runs seven terminal commands, with scrolling and two slides. Its timeline is 4 minutes 57 seconds, or 17,837 frames.
 \end{itemize}
 
-\subsection{Performance Metrics}
+Realtime capture plays the lesson in one browser while recording the screen, then transcodes the recording to MP4. The deterministic renderer captures each frame as a JPEG at quality 92 and encodes with software H.264 (libx264, CRF 18) through FFmpeg. The pipelines differ, so the comparison measures throughput rather than equal image quality. Short Video times are medians of three runs. Long Video times are single runs.
 
-Table \ref{tab:performance} compares CodeVideo generation times with traditional video editing workflows across various lesson sizes. These estimates assume:
-\begin{itemize}
-    \item Average step duration of 4 seconds
-    \item 90 parallel Chrome instances (optimized for M4 architecture)
-    \item Hardware-accelerated video encoding
-    \item Traditional editing requiring 2.5x video length plus setup time per step
-\end{itemize}
+\subsection{Results}
 
-\begin{longtable}{|c|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|}
+The best configuration saves 53\% of the Short Video's render time and 73\% of the Long Video's.
+
+\begin{longtable}{|l|r|r|r|r|}
     \hline
-    \textbf{Number of Steps} & \textbf{Total Video Length} & \textbf{CodeVideo Generation} & \textbf{Traditional Editing Time} & \textbf{Performance Improvement} \\
-    & \textit{(minutes)} & \textit{(seconds)} & \textit{(hours)} & \textit{(factor)} \\
+    & \multicolumn{2}{c|}{\textbf{Short Video}} & \multicolumn{2}{c|}{\textbf{Long Video}} \\
+    \textbf{Renderer} & \textit{seconds} & \textit{speed-up} & \textit{seconds} & \textit{speed-up} \\
     \hline
-    50 & 3.3 & 17 & 0.56 & 5,324x \\
+    Realtime capture & 40.8 & 1.00$\times$ & 337.6 & 1.00$\times$ \\
     \hline
-    100 & 6.7 & 34 & 1.11 & 5,324x \\
+    Checkpoints, 1 worker & 34.6 & 1.18$\times$ & 283.2 & 1.19$\times$ \\
+    Checkpoints, 2 workers & 23.8 & 1.71$\times$ & 170.4 & 1.98$\times$ \\
+    Checkpoints, 4 workers & \textbf{19.3} & \textbf{2.11$\times$} & 109.2 & 3.09$\times$ \\
+    Checkpoints, 8 workers & 22.7 & 1.80$\times$ & \textbf{92.2} & \textbf{3.66$\times$} \\
     \hline
-    200 & 13.3 & 51 & 2.22 & 7,098x \\
-    \hline
-    500 & 33.3 & 102 & 5.56 & 8,873x \\
-    \hline
-    \caption{Performance comparison between CodeVideo and traditional video editing workflows on M4 architecture}
-    \label{tab:performance}
+    \caption{End-to-end render times. Short Video: median of three runs. Long Video: one run.}
+    \label{tab:render-times}
 \end{longtable}
 
-Let's also consider deployment on a 4GB Digital Ocean droplet running Ubuntu, where the following constraints apply:
+\subsection{Scaling}
 
-\begin{itemize}
-    \item System resources reserve approximately 1GB for OS and services
-    \item Each headless Chrome instance requires ~150MB (browser + video buffer)
-    \item Maximum safe parallel instances limited to 20 to maintain system stability
-    \item Additional swap space may be required for larger batch sizes
-\end{itemize}
+Render time grows linearly with video length. Predictions made from the Short Video before the Long Video was rendered came within 4 seconds of every checkpoint result. The speed-up still improves with length, because fixed costs such as browser start-up are spread over more frames. Table~\ref{tab:marginal-cost} gives the marginal cost of each extra second of video,
 
-In this case, the performance table would resemble:
+\[
+m = \frac{T_{\mathrm{Long}} - T_{\mathrm{Short}}}{D_{\mathrm{Long}} - D_{\mathrm{Short}}}
+\]
 
-\begin{longtable}{|c|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|>{\raggedright\arraybackslash}p{2.5cm}|}
+where \(T\) is render time and \(D\) is video duration. Realtime capture costs 1.10 seconds per second of video. Dividing that by a configuration's marginal cost gives the speed-up the configuration approaches on very long videos.
+
+\begin{longtable}{|c|c|c|}
     \hline
-    \textbf{Number of Steps} & \textbf{Total Video Length} & \textbf{CodeVideo Generation} & \textbf{Traditional Editing Time} & \textbf{Performance Improvement} \\
-    & \textit{(minutes)} & \textit{(seconds)} & \textit{(hours)} & \textit{(factor)} \\
+    \textbf{Workers} & \textbf{Seconds per second of video} & \textbf{Limit vs realtime} \\
     \hline
-    50 & 3.3 & 15 & 0.56 & 4,032x \\
+    1 & 0.93 & 1.2$\times$ \\
+    2 & 0.55 & 2.0$\times$ \\
+    4 & 0.33 & 3.3$\times$ \\
+    8 & 0.26 & 4.3$\times$ \\
     \hline
-    100 & 6.7 & 25 & 1.11 & 4,838x \\
-    \hline
-    200 & 13.3 & 50 & 2.22 & 4,838x \\
-    \hline
-    500 & 33.3 & 125 & 5.56 & 4,838x \\
-    \hline
-    \caption{Performance comparison between CodeVideo and traditional video editing workflows with 20 parallel instances}
-    \label{tab:performance}
+    \caption{Marginal cost of the checkpoint renderer and the implied speed-up limit on the test machine.}
+    \label{tab:marginal-cost}
 \end{longtable}
 
-\subsection{Scaling Characteristics}
-
-The framework exhibits near-linear scaling up to the parallel instance limit, with performance primarily bounded by:
+Three costs keep the speed-up below the worker count:
 
 \begin{itemize}
-    \item \textbf{I/O Operations:} NVMe bandwidth for intermediate file handling
-    \item \textbf{Memory Management:} Dynamic allocation across Chrome instances
-    \item \textbf{Video Encoding:} Hardware encoder queue depth
+    \item \textbf{Planning.} The planning pass is serial: 5--6 seconds for the Short Video and about 25 seconds for the Long Video. Saving checkpoints adds little. With its 620 checkpoints, the Long Video's planning took 23.6--26.9 seconds, against 23.1--26.1 seconds for planning without checkpoints.
+    \item \textbf{Start-up.} Each worker launches a browser and loads the editor. On the Short Video the slowest worker needed 3.7 seconds when running alone, 5.8 seconds with four workers and 10.6 seconds when eight started together. That contention makes eight workers slower than four on the Short Video. On the Long Video the cost is amortized, and eight workers win (92.2 seconds against 109.2).
+    \item \textbf{The longest segment.} With checkpoints only at action boundaries, nothing could cut the Short Video's 15-second typing action, so its largest segment at four workers was 903 frames. Mid-action checkpoints cut that action at characters 57 and 245 and the terminal command at character 6, leaving segments of 450, 450, 450 and 369 frames. The four-worker render fell from 26.0 seconds, measured with the same harness the day before, to 19.3 seconds.
 \end{itemize}
 
-As demonstrated by the performance metrics, the CodeVideo framework achieves approximately a 200x improvement in production time compared to traditional video editing workflows when leveraging modern unified memory architecture. This extraordinary efficiency gain is particularly pronounced for larger lessons, making it feasible to generate entire courses of content in minutes rather than hours or days.
+Without checkpoints, extra workers pay to replay the beginning of the lesson. In the \textit{sequential seek} variant, each worker replays the lesson from the start on the virtual clock and captures only its own range. On the Long Video with eight workers, sequential seek evaluates 142,696 frames instead of 17,837 and takes 151.1 seconds, 64\% longer than checkpoints. Its best result is 135.8 seconds, at four workers.
 
-The parallel processing capabilities of the M4 architecture, combined with hardware-accelerated video encoding and the unified memory model, enable the framework to process approximately 90 steps simultaneously. This results in the remarkably fast generation times shown above, with even 500-step lessons completing in under 2 minutes.
+\subsection{Verification}
 
-\section{Appendix B - Example JSON of a Simple Console Logging Lesson for Javascript}
+\begin{itemize}
+    \item For each lesson, renders with one, two, four and eight workers have identical SHA-256 hashes for every source frame and identical event traces. Each output has exactly the expected frame count, with no missing or repeated frames.
+    \item Across all segments, checkpoint workers capture each frame exactly once, so the frames evaluated equal the frames output.
+    \item Mid-action checkpoints change no output. With typos and jitter off, the Short Video matches a render that uses action-boundary checkpoints only, frame for frame.
+    \item With typos and jitter on, every deterministic render of the Short Video, from one to eight workers and with or without checkpoints, produced identical frames and traces. Random choices do not depend on how the video is split.
+\end{itemize}
+
+\subsection{Limits}
+
+\begin{itemize}
+    \item Identical output assumes the same browser build, fonts, renderer build, lesson and seed. Results across different browsers, operating systems or font rasterizers are not promised.
+    \item Different worker counts change the H.264 segment boundaries, so encoded MP4 files can differ byte for byte even when every source frame is identical.
+    % Remove this item if the difference is fixed before publication.
+    \item The two deterministic strategies are not yet pixel-identical to each other. On the Long Video, checkpoints and sequential seek differ in 97 of 17,837 frames, in faint antialiasing around the mouse cursor.
+    % If the rename-input mismatch is still open at publication, add:
+    % \item One restoration test that resumes while a file-rename input is on screen still renders a slightly different glyph.
+    \item Lessons with external web previews cannot be checkpointed, because the external page's state cannot be saved. They fall back to sequential seek.
+    \item All figures come from one Apple Silicon machine. Linux servers have not been measured.
+\end{itemize}
+
+\subsection{Reproduction}
+
+{\emergencystretch=3em Both lessons (\texttt{fixture.json} and \texttt{fixture-\allowbreak 5min.json}) and the benchmark script ship with the \texttt{codevideo-\allowbreak ide-\allowbreak react} repository under \texttt{scripts/\allowbreak golden}. The script renders every configuration, hashes every source frame and compares traces between runs. It stops at the first difference.\par}
+
+\section{Example JSON of a Simple Console Logging Lesson for Javascript}
+\label{app:example-json}
 
 \begin{Verbatim}[breaklines=true]
 [
@@ -572,7 +604,8 @@ The parallel processing capabilities of the M4 architecture, combined with hardw
 ]
 \end{Verbatim}
 
-\section{Appendix B - List of All Possible Actions within the CodeVideo Framework}
+\section{List of All Possible Actions within the CodeVideo Framework}
+\label{app:actions}
 
 \begin{longtable}{|p{0.3\textwidth}|p{0.3\textwidth}|p{0.4\textwidth}|}
     \hline
